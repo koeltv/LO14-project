@@ -1,0 +1,134 @@
+#!/bin/bash
+
+# Necessary files & directories
+pcron_dir="/etc/pcron"
+pcrontab_file="/etc/pcrontab"
+log_file="/var/log/pcron"
+allow_file="/etc/pcron.allow"
+deny_file="/etc/pcron.deny"
+
+mkdir -p $pcron_dir
+touch $pcrontab_file
+
+log_message() {
+	echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$log_file"
+}
+
+# Function to check user permissions
+# We first check the deny list, then the allow list
+check_permissions() {
+	local user=$1
+
+	if [ -f "$deny_file" ] && grep -q "^$user$" "$deny_file"; then
+		log_message "User $user is denied access to pcron."
+		exit 1
+	fi
+	if [ -f "$allow_file" ] && ! grep -q "^$user$" "$allow_file"; then
+		log_message "User $user is not authorized to use pcron."
+		exit 1
+	fi
+}
+
+# Function to parse time fields
+# TODO EXPAND IT TO MEET ALL CONDITIONS :,-,*/nb,~
+matches_time() {
+	local current_value="$1"
+	local field="$2"
+
+	# Correspondance exacte
+	if [[ "$field" =~ ^[0-9]+$ ]]; then
+		return $(( $current_value == $field ))
+	fi
+
+	# Étoile (*) : correspond à toutes les valeurs
+	if [[ "$field" == "*" ]]; then
+		return 0
+	fi
+
+	# Pas (*/N) : toutes les N unités
+	if [[ "$field" =~ ^\*/([0-9]+)$ ]]; then
+		local step="${BASH_REMATCH[1]}"
+		[[ "$((current_value % step))" -eq 0 ]] && return 0 || return 1
+	fi
+
+	# Liste de valeurs (X:Y:Z) : correspond si current_value est dans la liste
+	if [[ "$field" =~ ^([0-9]+(:[0-9]+)*)$ ]]; then
+		IFS=":" read -ra values <<< "$field"
+		for value in "${values[@]}"; do
+			if [[ "$current_value" -eq "$value" ]]; then
+				return 0
+			fi
+		done
+		return 1
+	fi
+
+	# Intervalle avec exclusions (A-B~X~Y) ou sans (A-B) : exclut certaines valeurs dans l'intervalle
+	if [[ "$field" =~ ^([0-9]+)-([0-9]+)(~[0-9]+)*$ ]]; then
+		local start="${BASH_REMATCH[1]}"
+		local end="${BASH_REMATCH[2]}"
+
+		local excluded_values=()
+		# Extraction des exclusions
+		if [[ "$field" =~ (~[0-9]+) ]]; then
+			excluded_values=($(echo "$field" | grep -o "~[0-9]+" | tr -d "~"))
+		fi
+		# Vérifie si dans l'intervalle, puis vérifie les exclusions
+		if [[ "$current_value" -ge "$start" && "$current_value" -le "$end" ]]; then
+			for excluded in "${excluded_values[@]}"; do
+				if [[ "$current_value" -eq "$excluded" ]]; then
+					return 1
+				fi
+			done
+			return 0
+		fi
+		return 1
+	fi
+
+	return 1  # Par défaut, pas de correspondance
+}
+
+check_permissions $USER
+
+# Main loop to check scheduled tasks
+while true; do
+	# Check system-wide tasks in /etc/pcrontab
+	if [ -f "$pcrontab_file" ]; then
+		while read -r sec min hour day mon dow command; do
+			# Check if this command should run now
+
+			read current_sec current_min current_hour current_day current_mon current_dow < <(date +"%S %M %H %d %m %u")
+
+			if matches_time "$sec" "$current_sec" &&
+				matches_time "$min" "$current_min" &&
+				matches_time "$hour" "$current_hour" &&
+				matches_time "$day" "$current_day" &&
+				matches_time "$mon" "$current_mon" &&
+				matches_time "$dow" "$current_dow"; then
+					eval "$command" >> "$log_file" 2>&1
+					log_message "Executed system task: $command"
+			fi
+		done < "$pcrontab_file"
+	fi
+
+	# Check user-specific tasks in /etc/pcron
+	for user_file in "$pcron_dir"/*; do
+		if [ ! -f "$user_file" ]; then
+			continue
+		fi
+
+		while read -r sec min hour day mon dow command; do
+			if matches_time "$sec" "$current_sec" &&
+				matches_time "$min" "$current_min" &&
+				matches_time "$hour" "$current_hour" &&
+				matches_time "$day" "$current_day" &&
+				matches_time "$mon" "$current_mon" &&
+				matches_time "$dow" "$current_dow"; then
+					eval "$command" >> "$log_file" 2>&1
+					log_message "Executed user task from $user_file: $command"
+			fi
+		done < "$user_file"
+	done
+
+	# Wait before checking again (e.g., every 15 seconds)
+	sleep 15
+done

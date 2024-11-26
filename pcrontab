@@ -1,0 +1,84 @@
+#!/bin/bash
+
+display_usage() {
+	echo "Usage: pcrontab [-u user] {-l | -r | -e}"
+	exit 1
+}
+
+parse_file() {
+	# Check each lines, not-commented lines should be checked
+	exit 1 # WIP
+}
+
+file_usage="# Edit this file to introduce tasks to be run by pcron.
+#
+# Each task to run has to be defined through a single line
+# indicating with different fields when the task will be run
+# and what command to run for the task
+#
+# To define the time you can provide concrete values for
+# second (s), minute (m), hour (h), day of month (dom), month (mon),
+# and day of week (dow) or use '*' in these fields (for 'any').
+#
+# Notice that tasks will be started based on the pcron's system
+# daemon's notion of time and timezones.
+#
+# Each action of the pcrontab jobs (including errors) are logged
+# to /var/log/pcron.
+#
+# For example, you can run a backup of all your user accounts
+# at 5 a.m every week with:
+# 0 0 5 * * 1 tar -zcf /var/backups/home.tgz /home/
+#
+# s m h dom mon dow command
+"
+
+# Parse options
+user="$USER"
+while getopts ":u:lre" opt; do
+    case $opt in
+        u) user="$OPTARG" ;;
+        l) action="list" ;;
+        r) action="remove" ;;
+        e) action="edit" ;;
+        *) display_usage ;;
+    esac
+done
+
+pcron_dir="/etc/pcron"
+pcron_user_file="$pcron_dir/pcrontab${user}"
+
+case $action in
+    list)
+    		if [ -r "$pcron_user_file" ]; then
+    			cat "$pcron_user_file"
+    		else
+    			echo "no pcrontab for $user"
+    		fi
+    		;;
+    remove) rm "$pcron_user_file" ;;
+    edit)
+        temp_file="/tmp/pcrontab${user}"
+
+        if [ -r "$pcron_user_file" ]; then
+        	cp "$pcron_user_file" "$temp_file"
+        else
+        	echo "$file_usage" > "$temp_file"
+        fi
+
+        vi "$temp_file"
+        #while $(( parse_file "$temp_file" )); do
+        #	echo "There is an error in $temp_file, do you wish to fix it (y/n) ?"
+        #	read answer
+        #	if [ answer == "n" ]; then
+        #		exit 1
+        #	elif [ answer == "y" ]; then
+        #		vi "$temp_file"
+        #	fi
+        #done
+        mkdir -p "$pcron_dir"
+        cp "$temp_file" "$pcron_user_file"
+        rm "$temp_file"
+        ;;
+    *) display_usage ;;
+esac
