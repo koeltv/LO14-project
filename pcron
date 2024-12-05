@@ -24,7 +24,6 @@ check_permissions() {
 }
 
 # Function to parse time fields
-# TODO EXPAND IT TO MEET ALL CONDITIONS :,-,*/nb,~
 matches_time() {
 	local current_value="$1"
 	local field="$2"
@@ -65,7 +64,7 @@ matches_time() {
 		local excluded_values=()
 		# Extraction des exclusions
 		if [[ "$field" =~ (~[0-9]+) ]]; then
-			excluded_values=($(echo "$field" | grep -o "~[0-9]+" | tr -d "~"))
+			excluded_values=($(echo "$field" | egrep -o "~[0-9]+" | tr -d "~"))
 		fi
 		# Vérifie si dans l'intervalle, puis vérifie les exclusions
 		if [[ "$current_value" -ge "$start" && "$current_value" -le "$end" ]]; then
@@ -129,7 +128,7 @@ while true; do
 		  read -r sec min hour day mon dow command <<< "$line"
 
 		  # Check if this command should run now
-			if matches_time "$sec" "$current_sec" &&
+			if matches_time "$((sec / 15))" "$current_sec" &&
 				matches_time "$min" "$current_min" &&
 				matches_time "$hour" "$current_hour" &&
 				matches_time "$day" "$current_day" &&
