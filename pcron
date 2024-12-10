@@ -17,7 +17,7 @@ check_permissions() {
 	  ([ -f "$deny_file" ] && grep -q "^$USER$" "$deny_file") ||
   	([ -f "$allow_file" ] && ! grep -q "^$USER$" "$allow_file")
 	); then
-	  echo "L'utilisateur $USER n'a pas les permissions sur pcron"
+	  echo "User $USER doesn't have permissions for pcron"
 	  exit 1
 	fi
 }
@@ -27,19 +27,19 @@ matches_time() {
 	local field="$1"
 	local current_value="$2"
 
-	# Correspondance exacte
+	# Exact match
 	if [[ "$field" == "$current_value" ]]; then return 0; fi
 
-	# Étoile (*) : correspond à toutes les valeurs
+	# Star (*) : match all values
 	if [[ "$field" == "*" ]]; then return 0; fi
 
-	# Pas (*/N) : toutes les N unités
+	# Step (*/N) : every N units
 	if [[ "$field" =~ ^\*/([0-9]+)$ ]]; then
 		local step="${BASH_REMATCH[1]}"
 		[[ "$((current_value % step))" -eq 0 ]] && return 0 || return 1
 	fi
 
-	# Liste de valeurs (X:Y:Z) : correspond si la valeur est dans la liste
+	# List of values (X:Y:Z) : match if the value is in the list
 	if [[ "$field" =~ ^([0-9]+(:[0-9]+)*)$ ]]; then
 		IFS=":" read -ra values <<< "$field"
 		for value in "${values[@]}"; do
@@ -48,17 +48,16 @@ matches_time() {
 		return 1
 	fi
 
-	# Intervalle avec exclusions (A-B~X~Y) ou sans (A-B) : exclut certaines valeurs dans l'intervalle
+	# Interval with exclusions (A-B~X~Y) or without (A-B) : match if value in interval and not excluded
 	if [[ "$field" =~ ^([0-9]+)-([0-9]+)(~[0-9]+)*$ ]]; then
 		local start="${BASH_REMATCH[1]}"
 		local end="${BASH_REMATCH[2]}"
 
 		local excluded_values=()
-		# Extraction des exclusions
 		if [[ "$field" =~ (~[0-9]+) ]]; then
 			excluded_values=($(echo "$field" | egrep -o "~[0-9]+" | tr -d "~"))
 		fi
-		# Vérifie si dans l'intervalle, puis vérifie les exclusions
+
 		if [[ "$current_value" -ge "$start" && "$current_value" -le "$end" ]]; then
 			for excluded in "${excluded_values[@]}"; do
 				if [[ "$current_value" -eq "$excluded" ]]; then return 1; fi
@@ -68,7 +67,7 @@ matches_time() {
 		return 1
 	fi
 
-	return 1  # Par défaut, pas de correspondance
+	return 1  # By default, no match
 }
 
 check_and_run() {
@@ -123,6 +122,6 @@ while true; do
 
   check_and_run &
 
-  # Wait until the next 15-second interval
+  # Wait until the next 15-second interval (handles deviation)
   sleep $((15 - $(date +%S) % 15))
 done
