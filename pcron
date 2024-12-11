@@ -123,5 +123,5 @@ while true; do
   check_and_run &
 
   # Wait until the next 15-second interval (handles deviation)
-  sleep $((15 - $(date +%S) % 15))
+  sleep $((15 - $(date +"%-S") % 15))
 done
