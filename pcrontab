@@ -5,9 +5,73 @@ display_usage() {
 	exit 1
 }
 
+
 parse_file() {
-	# Check each lines, not-commented lines should be checked
-	exit 1 # WIP
+    #checking the file is existing and readable
+    if [ ! -r "$1" ]; then
+        echo "le fichier n'est pas lisible ou n'existe pas" 
+        return 1
+    else
+        #define a boolean to be true if the file is correct and false otherwise
+        correct=0
+        #define the numbers that are alowed for each part of the schedule
+        type0='[0-3]'
+        type1='[1-5]?[0-9]'
+        type2='1?[0-9]$|^2[0-3]'
+        type3='[1-2]?[0-9]$|^3[0-1]'
+        type4='[1-9]$|^1[0-2]'
+        type5='[0-6]'
+        line=1 #keep track of the lines
+        # Check each lines, not-commented lines should be checked
+        while read ligne
+        do
+            if ! echo "$ligne" | grep -q '^#' ; then
+                field=0 #keep track of the field number
+                set -f
+                for mot in "$ligne"
+                do
+                set +f
+                    if [ "$field" -gt 5 ]; then 
+                        break
+                    fi
+                    if [ "$(echo "$mot" | awk 'BEGIN {FS="-"} {print NF}')" -eq 2 ]; then
+                    #checks if the field is an interval of values, and if the values entered are correct
+                        first="$(echo "$mot" | cut -d"-" -f1)"
+                        if [ "$(echo "$mot" | awk 'BEGIN {FS="~"} {print NF}')" -lt 2 ]; then
+                            last="$(echo "$mot" | cut -d"-" -f2)"
+                        else
+                            last="$(echo "$mot" | cut -d"~" -f1 | cut -d"-" -f2)"
+                        fi
+                        if [ "$first" -ge "$last" ]; then 
+                            correct=1
+                            echo "l'intervalle du champ $((field+1)) de la ligne $line est incorrect : la première valeur est plus grande que la seconde"
+                            break
+                        else 
+                            for i in $(seq 2 "$(echo "$mot" | awk 'BEGIN {FS="~"} {print NF}')")
+                            do
+                                bannedValue=$(echo "$mot" | cut -d"~" -f"$i")
+                                if [ "$bannedValue" -lt "$first" ] || [ "$bannedValue" -gt "$last" ]; then
+                                    correct=2
+                                    echo "la valeur bannie $bannedValue de l''intervalle du champ $((field+1)) de la ligne $line doit être comprise dans l'intervalle inital"
+                                    break
+                                fi
+                            done
+                        fi
+                    fi
+                    #concatenate into one type that will change value for every iteration
+                    typeField="type""$field"
+                    type=$(eval echo \$"$typeField")
+                    if ! echo "$mot" | grep -E -q "^$type(:$type)*$|^$type-$type(\~$type)*$|^\*\/$type$|^\*$" ; then
+                        correct=3
+                        echo "la valeur de $mot est incorrecte sur le champ $((field+1)) de la ligne $line"
+                    fi
+                    ((field++))
+                done
+            fi
+        ((line++))
+        done < "$1"
+        return $correct
+    fi
 }
 
 file_usage="# Edit this file to introduce tasks to be run by pcron.
