@@ -21,8 +21,8 @@ parse_file() {
   	    '[1-5]?[0-9]'
   	    '1?[0-9]$|^2[0-3]'
   	    '[1-2]?[0-9]$|^3[0-1]'
-    	'[1-9]$|^1[0-2]'
-    	'[0-6]'
+    	    '[1-9]$|^1[0-2]'
+    	    '[0-6]'
 	)
         line=1 #keep track of the lines
         # Check each lines, not-commented lines should be checked
@@ -30,10 +30,10 @@ parse_file() {
         do
             if ! echo "$ligne" | grep -q '^#' ; then
                 field=0 #keep track of the field number
-		        set -f #désactive le globbing pour pouvoir lire les * comme des caractères normaux
+		set -f #désactive le globbing pour pouvoir lire les * comme des caractères normaux
                 for mot in $ligne
                 do
-		            set +f
+		    set +f
                     if [ "$field" -gt 5 ]; then 
                         break
                     fi
