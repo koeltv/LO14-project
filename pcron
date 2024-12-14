@@ -7,6 +7,20 @@ log_file="/var/log/pcron"
 allow_file="/etc/pcron.allow"
 deny_file="/etc/pcron.deny"
 
+# Run a command necessary for configuring pcron, and exit with error output if it fails
+run_setup_cmd() {
+  eval "$*" > /dev/null 2>&1 || {
+    if [[ "$*" =~ .*mkdir\ +([^ ]+).* || "$*" =~ .*touch\ +([^ ]+).* ]]; then
+        echo "Could not create ${BASH_REMATCH[1]}, you need to run this script at least once as administrator" >&2
+    elif [[ "$*" =~ .*chmod\ ([^ ]+)\ ([^ ]+).* ]]; then
+        echo "Could not modify permissions on ${BASH_REMATCH[2]}, you need to run this script at least once as administrator" >&2
+    else
+        echo "An error occurred during setup when running command: '$*'" >&2
+    fi
+    exit 1
+  }
+}
+
 log_message() {
 	echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$log_file"
 }
@@ -17,7 +31,7 @@ check_permissions() {
 	  ([ -f "$deny_file" ] && grep -q "^$USER$" "$deny_file") ||
   	([ -f "$allow_file" ] && ! grep -q "^$USER$" "$allow_file")
 	); then
-	  echo "User $USER doesn't have permissions for pcron"
+	  echo "User $USER doesn't have permissions for pcron" >&2
 	  exit 1
 	fi
 }
@@ -27,11 +41,8 @@ matches_time() {
 	local field="$1"
 	local current_value="$2"
 
-	# Exact match
-	if [[ "$field" == "$current_value" ]]; then return 0; fi
-
-	# Star (*) : match all values
-	if [[ "$field" == "*" ]]; then return 0; fi
+	# Exact match or Star (*) : match value
+	if [[ "$field" == "$current_value" || "$field" == "*" ]]; then return 0; fi
 
 	# Step (*/N) : every N units
 	if [[ "$field" =~ ^\*/([0-9]+)$ ]]; then
@@ -81,10 +92,7 @@ check_and_run() {
 
   # Check tasks in /etc/pcron and /etc/pcrontab
   for file in "${files[@]}"; do
-  	while read -r line; do
-      # Parse line
-      read -r sec min hour day mon weekd command <<< "$line"
-
+  	while read -r sec min hour day mon weekd command; do
   	  # Check if this command should run now
   	  if matches_time "$sec" "$((current_sec / 15))" &&
   			matches_time "$min" "$current_min" &&
@@ -102,18 +110,17 @@ check_and_run() {
 
 # Setup necessary directories & files, along with their permissions
 if [ ! -d $pcron_dir ]; then
-  mkdir -p $pcron_dir > /dev/null 2>&1 || { echo "Could not create $pcron_dir"; exit 1; }
-  chmod a+w $pcron_dir > /dev/null 2>&1 || { echo "Could not modify permissions on $pcron_dir"; exit 1; }
+  run_setup_cmd mkdir -p $pcron_dir
+  run_setup_cmd chmod a+w $pcron_dir
 fi
-
 if [ ! -r $pcrontab_file ]; then
-  touch $pcrontab_file > /dev/null 2>&1 || { echo "Could not create $pcrontab_file"; exit 1; }
+  run_setup_cmd touch $pcrontab_file
 fi
 if [ ! -f $log_file ]; then
-  touch $log_file > /dev/null 2>&1 || { echo "Could not create $log_file"; exit 1; }
+  run_setup_cmd touch $log_file
 fi
 if [ ! -w $log_file ]; then
-  chmod a+w $log_file > /dev/null 2>&1 || { echo "Could not modify permissions on $log_file"; exit 1; }
+  run_setup_cmd chmod a+w $log_file
 fi
 
 # Main loop to check scheduled tasks
