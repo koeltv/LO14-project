@@ -1,4 +1,5 @@
 #!/bin/bash
+log_file="/var/log/pcron"
 
 display_usage() {
 	echo "Usage: pcrontab [-u user] {-l | -r | -e}"
@@ -7,10 +8,10 @@ display_usage() {
 
 
 parse_file() {
-    log_file="/var/log/pcron"
     #checking the file is existing and readable
     if [ ! -r "$1" ]; then
-        echo "le fichier n'est pas lisible ou n'existe pas" 
+        echo "le fichier n'est pas lisible ou n'existe pas" >>"$log_file"
+        echo "le fichier n'est pas lisible ou n'existe pas"
         return 1
     else
         #define a boolean to be true if the file is correct and false otherwise
@@ -21,7 +22,7 @@ parse_file() {
   	    '[1-5]?[0-9]'
   	    '1?[0-9]$|^2[0-3]'
   	    '[1-2]?[0-9]$|^3[0-1]'
-    	    '[1-9]$|^1[0-2]'
+            '[1-9]$|^1[0-2]'
     	    '[0-6]'
 	)
         line=1 #keep track of the lines
@@ -30,10 +31,10 @@ parse_file() {
         do
             if ! echo "$ligne" | grep -q '^#' ; then
                 field=0 #keep track of the field number
-		set -f #désactive le globbing pour pouvoir lire les * comme des caractères normaux
+		        set -f #désactive le globbing pour pouvoir lire les * comme des caractères normaux
                 for mot in $ligne
                 do
-		    set +f
+		            set +f
                     if [ "$field" -gt 5 ]; then 
                         break
                     fi
@@ -47,7 +48,8 @@ parse_file() {
                         fi
                         if [ "$first" -ge "$last" ]; then
                             correct=1
-                            echo "l'intervalle du champ $((field+1)) de la ligne $line est incorrect : la première valeur est plus grande que la seconde" 2>> "$log_file"
+                            echo "l'intervalle du champ $((field+1)) de la ligne $line est incorrect : la première valeur est plus grande que la seconde" >> "$log_file"
+                            echo "l'intervalle du champ $((field+1)) de la ligne $line est incorrect : la première valeur est plus grande que la seconde"
                             break
                         else 
                             for i in $(seq 2 "$(echo "$mot" | awk 'BEGIN {FS="~"} {print NF}')")
@@ -55,7 +57,8 @@ parse_file() {
                                 bannedValue=$(echo "$mot" | cut -d"~" -f"$i")
                                 if [ "$bannedValue" -lt "$first" ] || [ "$bannedValue" -gt "$last" ]; then
                                     correct=2
-                                    echo "la valeur bannie $bannedValue de l'intervalle du champ $((field+1)) de la ligne $line doit être comprise dans l'intervalle inital" 2>> "$log_file"
+                                    echo "la valeur bannie $bannedValue de l'intervalle du champ $((field+1)) de la ligne $line doit être comprise dans l'intervalle inital" >> "$log_file"
+                                    echo "la valeur bannie $bannedValue de l'intervalle du champ $((field+1)) de la ligne $line doit être comprise dans l'intervalle inital"
                                     break
                                 fi
                             done
@@ -65,7 +68,8 @@ parse_file() {
                     type=${types[$field]}
                     if ! echo "$mot" | grep -E -q "^$type(:$type)*$|^$type-$type(\~$type)*$|^\*\/$type$|^\*$" ; then
                         correct=3
-                        echo "la valeur $mot est incorrecte sur le champ $((field+1)) de la ligne $line" 2>> "$log_file"
+                        echo "la valeur $mot est incorrecte sur le champ $((field+1)) de la ligne $line" >> "$log_file"
+                        echo "la valeur $mot est incorrecte sur le champ $((field+1)) de la ligne $line"
                     fi
                     ((field++))
                 done
