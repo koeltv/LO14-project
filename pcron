@@ -25,15 +25,26 @@ log_message() {
 	echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$log_file"
 }
 
-# Check user permissions, we first check the deny list, then the allow list
+# Check user permissions, we first check the allow list, then the deny list
 check_permissions() {
-	if [[ $USER != "root" ]] && (
-	  ([ -f "$deny_file" ] && grep -q "^$USER$" "$deny_file") ||
-  	([ -f "$allow_file" ] && ! grep -q "^$USER$" "$allow_file")
-	); then
-	  echo "User $USER doesn't have permissions for pcron" >&2
-	  exit 1
-	fi
+  local user_groups=($(id -nG))
+
+  if echo "${user_groups[@]}" | grep -q '\broot\b'; then return 0; fi
+
+  if [ -f "$allow_file" ]; then
+    for group in "${user_groups[@]}"; do
+        if grep -q "^$group$" "$allow_file"; then return 0; fi
+    done
+  fi
+
+  if [ -f "$deny_file" ]; then
+    for group in "${user_groups[@]}"; do
+        if grep -q "^$group$" "$deny_file"; then
+          echo "User ${user_groups[0]} doesn't have permissions for pcron" >&2
+          exit 1
+        fi
+    done
+  fi
 }
 
 # Match time field with current time value
@@ -123,10 +134,10 @@ if [ ! -w $log_file ]; then
   run_setup_cmd chmod a+w $log_file
 fi
 
+check_permissions
+
 # Main loop to check scheduled tasks
 while true; do
-  check_permissions
-
   check_and_run &
 
   # Wait until the next 15-second interval (handles deviation)

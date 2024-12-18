@@ -12,4 +12,6 @@ Dépôt GitHub pour le projet LO14 `pcron`
 - Permissions
   - Tout utilisateur peut écrire dans `/etc/pcron`, donc utiliser `pcrontab`
   - Un utilisateur ne peut modifier que son propre fichier
-  - `pcron` est restreint par `pcron.allow` et `pcron.deny`, par défault seul `root` est autorisé
+  - `pcron` est restreint par `pcron.allow` et `pcron.deny`, par défault tout le monde à la permission
+    - `pcron.allow` est prioritaire sur `pcron.deny`
+    - Ces 2 fichiers prennent des noms d'utilisateur et/ou des groupes (1 par ligne)
