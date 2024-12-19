@@ -1,14 +1,80 @@
 #!/bin/bash
 
+log_file="/var/log/pcron"
+
 display_usage() {
 	echo "Usage: pcrontab [-u user] {-l | -r | -e}"
 	exit 1
 }
 
-parse_file() {
-	# Check each lines, not-commented lines should be checked
-	exit 1 # WIP
+log_message() {
+  local message="$1"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $message" >> "$log_file"
+  echo "$message"
 }
+
+parse_file() {
+  # Checking the file is existing and readable
+  if [ ! -r "$1" ]; then
+    log_message "the file can't be read or doesn't exist"
+    return 1
+  else
+    # Define a boolean to be true if the file is correct and false otherwise
+    correct=0
+    # Define the numbers that are allowed for each part of the schedule
+    types=(
+    '[0-3]'
+    '[1-5]?[0-9]'
+    '1?[0-9]$|^2[0-3]'
+    '[1-2]?[0-9]$|^3[0-1]'
+    '[1-9]$|^1[0-2]'
+  	'[0-6]'
+	  )
+    line=1 # Keep track of the lines
+    # Check each lines, not-commented lines should be checked
+    while read -a ligne; do
+      if ! echo "${ligne[@]}" | grep -q '^#' ; then
+        field=0 # Keep track of the field number
+        for mot in "${ligne[@]}"; do
+          if [ "$field" -gt 5 ]; then break; fi
+          if [ "$(echo "$mot" | awk 'BEGIN {FS="-"} {print NF}')" -eq 2 ]; then
+          # Checks if the field is an interval of values, and if the values entered are correct
+            first="$(echo "$mot" | cut -d"-" -f1)"
+            if [ "$(echo "$mot" | awk 'BEGIN {FS="~"} {print NF}')" -lt 2 ]; then
+              last="$(echo "$mot" | cut -d"-" -f2)"
+            else
+              last="$(echo "$mot" | cut -d"~" -f1 | cut -d"-" -f2)"
+            fi
+            if [ "$first" -ge "$last" ]; then
+              correct=1
+              log_message "The interval of the field $((field+1)) on line $line is incorrect : the first value is greater than the second"
+              break
+            else
+              for i in $(seq 2 "$(echo "$mot" | awk 'BEGIN {FS="~"} {print NF}')"); do
+                bannedValue=$(echo "$mot" | cut -d"~" -f"$i")
+                if [ "$bannedValue" -lt "$first" ] || [ "$bannedValue" -gt "$last" ]; then
+                  correct=2
+                  log_message "the excluded value $bannedValue of the field interval $((field+1)) on line $line must be in the initial interval"
+                  break
+                fi
+              done
+            fi
+          fi
+          # Calls the types value that fits with the field number
+          type=${types[$field]}
+          if ! echo "$mot" | grep -E -q "^$type(:$type)*$|^$type-$type(\~$type)*$|^\*\/$type$|^\*$"; then
+            correct=3
+            log_message "value $mot is incorrect in field $((field+1)) on line $line"
+          fi
+          ((field++))
+        done
+      fi
+    ((line++))
+    done < "$1"
+    return $correct
+  fi
+}
+
 
 file_usage="# Edit this file to introduce tasks to be run by pcron.
 #
@@ -36,49 +102,47 @@ file_usage="# Edit this file to introduce tasks to be run by pcron.
 # Parse options
 user="$USER"
 while getopts ":u:lre" opt; do
-    case $opt in
-        u) user="$OPTARG" ;;
-        l) action="list" ;;
-        r) action="remove" ;;
-        e) action="edit" ;;
-        *) display_usage ;;
-    esac
+  case $opt in
+    u) user="$OPTARG" ;;
+    l) action="list" ;;
+    r) action="remove" ;;
+    e) action="edit" ;;
+    *) display_usage ;;
+  esac
 done
 
 pcron_dir="/etc/pcron"
 pcron_user_file="$pcron_dir/pcrontab${user}"
 
 case $action in
-    list)
-    		if [ -r "$pcron_user_file" ]; then
-    			cat "$pcron_user_file"
-    		else
-    			echo "no pcrontab for $user"
-    		fi
-    		;;
-    remove) rm "$pcron_user_file" ;;
-    edit)
-        temp_file="/tmp/pcrontab${user}"
+  list)
+  	if [ -r "$pcron_user_file" ]; then
+  		cat "$pcron_user_file"
+  	else
+  		echo "no pcrontab for $user"
+  	fi
+  	;;
+  remove) rm "$pcron_user_file" ;;
+  edit)
+    if [ ! -d "$pcron_dir" ]; then echo "$pcron_dir doesn't exist, please run pcron at least once as administrator to create it"; exit 1; fi
+    temp_file="/tmp/pcrontab${user}"
 
-        if [ -r "$pcron_user_file" ]; then
-        	cp "$pcron_user_file" "$temp_file"
-        else
-        	echo "$file_usage" > "$temp_file"
-        fi
+    if [ -r "$pcron_user_file" ]; then
+    	cp "$pcron_user_file" "$temp_file"
+    else
+    	echo "$file_usage" > "$temp_file"
+    fi
 
-        vi "$temp_file"
-        #while $(( parse_file "$temp_file" )); do
-        #	echo "There is an error in $temp_file, do you wish to fix it (y/n) ?"
-        #	read answer
-        #	if [ answer == "n" ]; then
-        #		exit 1
-        #	elif [ answer == "y" ]; then
-        #		vi "$temp_file"
-        #	fi
-        #done
-        mkdir -p "$pcron_dir"
-        cp "$temp_file" "$pcron_user_file"
-        rm "$temp_file"
-        ;;
-    *) display_usage ;;
+    vi "$temp_file"
+    until parse_file "$temp_file" ; do
+    	read -p "There is an error in $temp_file, do you wish to fix it (y/n) ? " answer
+    	case "$answer" in
+    	  [yY]) vi "$temp_file";;
+    	  [nN]) echo "Edits left in $temp_file"; exit 1;;
+    	esac
+    done
+    cp "$temp_file" "$pcron_user_file"
+    rm "$temp_file"
+    ;;
+  *) display_usage ;;
 esac
