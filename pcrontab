@@ -7,11 +7,16 @@ display_usage() {
 	exit 1
 }
 
+log_message() {
+  local message="$1"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $message" >> "$log_file"
+  echo "$message"
+}
+
 parse_file() {
   # Checking the file is existing and readable
   if [ ! -r "$1" ]; then
-    echo "the file can't be read or doesn't exist" >>"$log_file"
-    echo "the file can't be read or doesn't exist"
+    log_message "the file can't be read or doesn't exist"
     return 1
   else
     # Define a boolean to be true if the file is correct and false otherwise
@@ -27,12 +32,10 @@ parse_file() {
 	  )
     line=1 # Keep track of the lines
     # Check each lines, not-commented lines should be checked
-    while read ligne; do
-      if ! echo "$ligne" | grep -q '^#' ; then
+    while read -a ligne; do
+      if ! echo "${ligne[@]}" | grep -q '^#' ; then
         field=0 # Keep track of the field number
-	      set -f # Deactivate globbing to read * as normal characters
-        for mot in $ligne; do
-	        set +f
+        for mot in "${ligne[@]}"; do
           if [ "$field" -gt 5 ]; then break; fi
           if [ "$(echo "$mot" | awk 'BEGIN {FS="-"} {print NF}')" -eq 2 ]; then
           # Checks if the field is an interval of values, and if the values entered are correct
@@ -44,16 +47,14 @@ parse_file() {
             fi
             if [ "$first" -ge "$last" ]; then
               correct=1
-              echo "The interval of the field $((field+1)) on line $line is incorrect : the first value is greater than the second" >> "$log_file"
-              echo "The interval of the field $((field+1)) on line $line is incorrect : the first value is greater than the second"
+              log_message "The interval of the field $((field+1)) on line $line is incorrect : the first value is greater than the second"
               break
             else
               for i in $(seq 2 "$(echo "$mot" | awk 'BEGIN {FS="~"} {print NF}')"); do
                 bannedValue=$(echo "$mot" | cut -d"~" -f"$i")
                 if [ "$bannedValue" -lt "$first" ] || [ "$bannedValue" -gt "$last" ]; then
                   correct=2
-                  echo "the excluded value $bannedValue of the field interval $((field+1)) on line $line must be in the initial interval" >> "$log_file"
-                  echo "the excluded value $bannedValue of the field interval $((field+1)) on line $line must be in the initial interval"
+                  log_message "the excluded value $bannedValue of the field interval $((field+1)) on line $line must be in the initial interval"
                   break
                 fi
               done
@@ -63,8 +64,7 @@ parse_file() {
           type=${types[$field]}
           if ! echo "$mot" | grep -E -q "^$type(:$type)*$|^$type-$type(\~$type)*$|^\*\/$type$|^\*$"; then
             correct=3
-            echo "value $mot is incorrect in field $((field+1)) on line $line" >> "$log_file"
-            echo "value $mot is incorrect in field $((field+1)) on line $line"
+            log_message "value $mot is incorrect in field $((field+1)) on line $line"
           fi
           ((field++))
         done
@@ -124,6 +124,7 @@ case $action in
   	;;
   remove) rm "$pcron_user_file" ;;
   edit)
+    if [ ! -d "$pcron_dir" ]; then echo "$pcron_dir doesn't exist, please run pcron at least once as administrator to create it"; exit 1; fi
     temp_file="/tmp/pcrontab${user}"
 
     if [ -r "$pcron_user_file" ]; then
@@ -134,15 +135,12 @@ case $action in
 
     vi "$temp_file"
     until parse_file "$temp_file" ; do
-    	echo "There is an error in $temp_file, do you wish to fix it (y/n) ?"
-    	read answer
-    	if [ "$answer" == "n" ]; then
-    		exit 1
-    	elif [ "$answer" == "y" ]; then
-    		vi "$temp_file"
-    	fi
+    	read -p "There is an error in $temp_file, do you wish to fix it (y/n) ? " answer
+    	case "$answer" in
+    	  [yY]) vi "$temp_file";;
+    	  [nN]) echo "Edits left in $temp_file"; exit 1;;
+    	esac
     done
-    mkdir -p "$pcron_dir"
     cp "$temp_file" "$pcron_user_file"
     rm "$temp_file"
     ;;
