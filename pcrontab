@@ -111,6 +111,11 @@ while getopts ":u:lre" opt; do
   esac
 done
 
+if ! id "$user" &>/dev/null; then
+  echo "user \"$user\" doesn't exist"
+  exit 1
+fi
+
 pcron_dir="/etc/pcron"
 pcron_user_file="$pcron_dir/pcrontab${user}"
 
