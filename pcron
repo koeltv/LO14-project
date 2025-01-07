@@ -103,6 +103,7 @@ check_and_run() {
 
   # Check tasks in /etc/pcron and /etc/pcrontab
   for file in "${files[@]}"; do
+    if [ ! -r "$file" ]; then continue; fi
   	while read -r sec min hour day mon weekd command; do
   	  # Check if this command should run now
   	  if matches_time "$sec" "$((current_sec / 15))" &&
