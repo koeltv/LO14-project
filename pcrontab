@@ -145,7 +145,7 @@ case $action in
     if [ ! -f "$pcron_user_file" ]; then
       if [ "$(id -nu)" == "$user" ] || groups "$USER" | grep -q "\bsudo\b"; then
         echo "$file_usage" > "$temp_file"
-        if groups "$USER" | grep -q "\bsudo\b"; then
+        if [ ! "$(id -nu)" == "$user" ]; then
           sudo chown "$user":"$user" "$temp_file"
           permissions="admin"
         fi
@@ -156,7 +156,7 @@ case $action in
     else
       if [ -w "$pcron_user_file" ] || groups "$USER" | grep -q "\bsudo\b"; then
         cp "$pcron_user_file" "$temp_file"
-        if groups "$USER" | grep -q "\bsudo\b"; then
+        if [ ! -w "$pcron_user_file" ]; then
           permissions="admin"
         fi
       else
