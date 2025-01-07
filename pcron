@@ -9,11 +9,13 @@ deny_file="/etc/pcron.deny"
 
 # Run a command necessary for configuring pcron, and exit with error output if it fails
 run_setup_cmd() {
-  eval "$*" > /dev/null 2>&1 || {
+  if groups "$USER" | grep -q "\bsudo\b"; then sudo="sudo "; else sudo=""; fi
+
+  eval "$sudo$*" > /dev/null 2>&1 || {
     if [[ "$*" =~ .*mkdir\ +([^ ]+).* || "$*" =~ .*touch\ +([^ ]+).* ]]; then
-        echo "Could not create ${BASH_REMATCH[1]}, you need to run this script at least once as administrator" >&2
+        echo "Could not create ${BASH_REMATCH[1]}, you need to run this script at least with privileges" >&2
     elif [[ "$*" =~ .*chmod\ ([^ ]+)\ ([^ ]+).* ]]; then
-        echo "Could not modify permissions on ${BASH_REMATCH[2]}, you need to run this script at least once as administrator" >&2
+        echo "Could not modify permissions on ${BASH_REMATCH[2]}, you need to run this script at least once with privileges" >&2
     else
         echo "An error occurred during setup when running command: '$*'" >&2
     fi
@@ -122,16 +124,20 @@ check_and_run() {
 
 # Setup necessary directories & files, along with their permissions
 if [ ! -d $pcron_dir ]; then
+  echo "Setting up $pcron_dir..."
   run_setup_cmd mkdir -p $pcron_dir
   run_setup_cmd chmod a+w $pcron_dir
 fi
 if [ ! -r $pcrontab_file ]; then
+  echo "Creating $pcrontab_file..."
   run_setup_cmd touch $pcrontab_file
 fi
 if [ ! -f $log_file ]; then
+  echo "Creating $log_file..."
   run_setup_cmd touch $log_file
 fi
 if [ ! -w $log_file ]; then
+  echo "Setting permissions on $log_file..."
   run_setup_cmd chmod a+w $log_file
 fi
 
