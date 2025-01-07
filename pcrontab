@@ -129,25 +129,53 @@ case $action in
   	;;
   remove) rm "$pcron_user_file" ;;
   edit)
-    if [ ! -d "$pcron_dir" ]; then echo "$pcron_dir doesn't exist, please run pcron at least once as administrator to create it"; exit 1; fi
+    if [ ! -d "$pcron_dir" ]; then
+      if groups "$USER" | grep -q "\bsudo\b"; then
+        echo "$pcron_dir doesn't exist, creating it..."
+        sudo mkdir -p $pcron_dir
+        sudo chmod a+w $pcron_dir
+      else
+        echo "$pcron_dir doesn't exist, you need to be privileged to create it"
+        exit 1
+      fi
+    fi
     temp_file="/tmp/pcrontab${user}"
 
-    if [ -r "$pcron_user_file" ]; then
-    	cp "$pcron_user_file" "$temp_file"
+    permissions="user"
+    if [ ! -f "$pcron_user_file" ]; then
+      if [ "$(id -nu)" == "$user" ] || groups "$USER" | grep -q "\bsudo\b"; then
+        echo "$file_usage" > "$temp_file"
+        if groups "$USER" | grep -q "\bsudo\b"; then
+          sudo chown "$user":"$user" "$temp_file"
+          permissions="admin"
+        fi
+      else
+        echo "You must be privileged to use -u to create a user pcron file"
+        exit 1
+      fi
     else
-    	echo "$file_usage" > "$temp_file"
+      if [ -w "$pcron_user_file" ] || groups "$USER" | grep -q "\bsudo\b"; then
+        cp "$pcron_user_file" "$temp_file"
+        if groups "$USER" | grep -q "\bsudo\b"; then
+          permissions="admin"
+        fi
+      else
+        echo "You don't have the permissions to edit $user pcron file"
+        exit 1
+      fi
     fi
 
-    vi "$temp_file"
+    if [ $permissions == "admin" ]; then sudo vi "$temp_file"; else vi "$temp_file"; fi
+
     until parse_file "$temp_file" ; do
     	read -p "There is an error in $temp_file, do you wish to fix it (y/n) ? " answer
     	case "$answer" in
-    	  [yY]) vi "$temp_file";;
+    	  [yY]) if [ $permissions == "admin" ]; then sudo vi "$temp_file"; else vi "$temp_file"; fi;;
     	  [nN]) echo "Edits left in $temp_file"; exit 1;;
     	esac
     done
     cp "$temp_file" "$pcron_user_file"
-    rm "$temp_file"
+    if [ $permissions == "admin" ]; then sudo rm "$temp_file"; else rm "$temp_file"; fi
     ;;
   *) display_usage ;;
 esac
