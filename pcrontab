@@ -127,7 +127,14 @@ case $action in
   		echo "no pcrontab for $user"
   	fi
   	;;
-  remove) rm "$pcron_user_file" ;;
+  remove)
+    if [ "$(id -nu)" == "$user" ] || [ "$(id -nu)" == "root" ]; then
+      rm "$pcron_user_file"
+    else
+      echo "You must be the user or privileged to remove a user pcron file"
+      exit 1
+    fi
+    ;;
   edit)
     if [ ! -d "$pcron_dir" ]; then
       if groups "$USER" | grep -q "\bsudo\b"; then
