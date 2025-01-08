@@ -25,9 +25,9 @@ parse_file() {
     types=(
     '[0-3]'
     '[1-5]?[0-9]'
-    '1?[0-9]$|^2[0-3]'
-    '[1-2]?[0-9]$|^3[0-1]'
-    '[1-9]$|^1[0-2]'
+    '1?[0-9]|2[0-3]'
+    '[1-2]?[0-9]|3[0-1]'
+    '[1-9]|1[0-2]'
   	'[0-6]'
 	  )
     line=1 # Keep track of the lines
@@ -62,7 +62,7 @@ parse_file() {
           fi
           # Calls the types value that fits with the field number
           type=${types[$field]}
-          if ! echo "$mot" | grep -E -q "^$type(:$type)*$|^$type-$type(\~$type)*$|^\*\/$type$|^\*$"; then
+          if ! echo "$mot" | grep -E -q "^($type)(:($type))*$|^($type)-($type)(\~($type))*$|^\*\/($type)$|^\*$"; then
             correct=3
             log_message "value $mot is incorrect in field $((field+1)) on line $line"
           fi
